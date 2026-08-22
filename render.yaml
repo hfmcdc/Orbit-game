@@ -1,0 +1,15 @@
+services:
+  # Backend: Node/Express/Socket.IO server. Also serves the built client
+  # as static files, so a single Render Web Service can host the whole app.
+  - type: web
+    name: orbit-server
+    runtime: node
+    rootDir: server
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_VERSION
+        value: 20.11.0
+      - key: TURN_SECONDS
+        value: 15
+    healthCheckPath: /health
