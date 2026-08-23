@@ -13,11 +13,12 @@ export type GameStatus = "lobby" | "playing" | "finished";
 
 export interface GuessResult {
   id: string;
-  playerId: string;
+  playerId: string; // "system" for hints, otherwise a real player's id
   nickname: string;
   word: string;
   rank: number; // 1..vocabSize, or -1 if unranked/unknown word
   createdAt: number;
+  isHint?: boolean; // true if this entry is a system-generated hint, not a player guess
 }
 
 export interface RoomStateForClient {

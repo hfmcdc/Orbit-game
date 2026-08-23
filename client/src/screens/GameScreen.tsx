@@ -15,6 +15,7 @@ interface GameScreenProps {
 export function GameScreen({ state, myPlayerId, flashGuess, onSubmitGuess, onLeave }: GameScreenProps) {
   const [guessValue, setGuessValue] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [locked, setLocked] = useState(false); // true right after submitting, until the turn actually moves on
   const inputRef = useRef<HTMLInputElement>(null);
 
   const isMyTurn = state.currentPlayerId === myPlayerId;
@@ -23,21 +24,32 @@ export function GameScreen({ state, myPlayerId, flashGuess, onSubmitGuess, onLea
   const me = state.players.find((p) => p.id === myPlayerId);
 
   useEffect(() => {
-    if (isMyTurn) inputRef.current?.focus();
+    if (isMyTurn) {
+      setLocked(false);
+      inputRef.current?.focus();
+    }
   }, [isMyTurn]);
 
   const submit = () => {
     const word = guessValue.trim();
-    if (!word || submitting) return;
+    if (!word || submitting || locked) return;
     setSubmitting(true);
-    onSubmitGuess(word, () => {
+    onSubmitGuess(word, (ok) => {
       setSubmitting(false);
       setGuessValue("");
-      inputRef.current?.focus();
+      if (ok) {
+        // One guess per turn: lock the input immediately so a fast double-tap
+        // can't fire a second guess before the server's turn-change broadcast
+        // arrives. It unlocks automatically next time it's this player's turn.
+        setLocked(true);
+      } else {
+        inputRef.current?.focus();
+      }
     });
   };
 
   const urgent = remaining <= 5;
+  const canType = isMyTurn && !submitting && !locked;
 
   return (
     <div className="min-h-dvh flex flex-col px-4 py-5">
@@ -125,15 +137,17 @@ export function GameScreen({ state, myPlayerId, flashGuess, onSubmitGuess, onLea
               ref={inputRef}
               value={guessValue}
               onChange={(e) => setGuessValue(e.target.value)}
-              disabled={!isMyTurn || submitting}
-              placeholder={isMyTurn ? "Type a word…" : "Waiting for your turn…"}
+              disabled={!canType}
+              placeholder={
+                isMyTurn ? (locked ? "Guess locked in…" : "One guess this turn…") : "Waiting for your turn…"
+              }
               autoComplete="off"
               autoCapitalize="none"
               autoCorrect="off"
               spellCheck={false}
               className="w-full rounded-2xl bg-panel-2 border border-border-subtle px-5 py-4 text-lg text-center focus:outline-none focus:ring-2 focus:ring-accent-far focus:border-accent-far disabled:opacity-50"
             />
-            <Button type="submit" fullWidth disabled={!isMyTurn || !guessValue.trim() || submitting}>
+            <Button type="submit" fullWidth disabled={!canType || !guessValue.trim()}>
               Guess
             </Button>
           </form>
@@ -142,12 +156,22 @@ export function GameScreen({ state, myPlayerId, flashGuess, onSubmitGuess, onLea
         {/* Flash: most recent guess */}
         {flashGuess && (
           <div className="text-center text-sm text-text-dim -mt-1">
-            <span className="font-medium text-text-primary">{flashGuess.nickname}</span> guessed{" "}
-            <span className="font-mono uppercase">{flashGuess.word}</span>{" "}
-            {flashGuess.rank > 0 ? (
-              <span className="font-mono text-accent-core">#{flashGuess.rank}</span>
+            {flashGuess.isHint ? (
+              <>
+                <span className="font-medium text-accent-win">💡 Hint</span> revealed{" "}
+                <span className="font-mono uppercase">{flashGuess.word}</span>{" "}
+                <span className="font-mono text-accent-win">#{flashGuess.rank}</span>
+              </>
             ) : (
-              <span className="text-text-dim">unranked</span>
+              <>
+                <span className="font-medium text-text-primary">{flashGuess.nickname}</span> guessed{" "}
+                <span className="font-mono uppercase">{flashGuess.word}</span>{" "}
+                {flashGuess.rank > 0 ? (
+                  <span className="font-mono text-accent-core">#{flashGuess.rank}</span>
+                ) : (
+                  <span className="text-text-dim">unranked</span>
+                )}
+              </>
             )}
           </div>
         )}
@@ -161,11 +185,17 @@ export function GameScreen({ state, myPlayerId, flashGuess, onSubmitGuess, onLea
             {state.guesses.slice(0, 20).map((g) => (
               <li
                 key={g.id}
-                className="flex items-center gap-2 text-sm bg-panel-2/60 rounded-lg px-3 py-2"
+                className={`flex items-center gap-2 text-sm rounded-lg px-3 py-2 ${
+                  g.isHint
+                    ? "bg-accent-win/10 border border-accent-win/30"
+                    : "bg-panel-2/60"
+                }`}
               >
-                <span className="text-text-dim w-16 truncate">{g.nickname}</span>
+                <span className={`w-16 truncate ${g.isHint ? "text-accent-win font-medium" : "text-text-dim"}`}>
+                  {g.isHint ? "💡 Hint" : g.nickname}
+                </span>
                 <span className="flex-1 font-mono uppercase truncate">{g.word}</span>
-                <span className="font-mono text-text-primary">
+                <span className={`font-mono ${g.isHint ? "text-accent-win" : "text-text-primary"}`}>
                   {g.rank > 0 ? `#${g.rank}` : "—"}
                 </span>
               </li>

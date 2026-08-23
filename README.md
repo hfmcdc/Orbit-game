@@ -23,8 +23,15 @@ orbit/
 - **Lobby**: create a room (get a 6-character code) or join one with a code.
   2–4 players. Only the host can start.
 - **Turns**: deterministic order (P1 → P2 → P3 → P4 → P1 …). Each player gets
-  **15 seconds**, timed by the server. A player can submit unlimited guesses
-  during their turn; the turn only ends when the timer runs out (or they win).
+  **15 seconds** per turn, timed by the server, and gets exactly **one guess**
+  per turn — the turn ends immediately after that guess (or when the 15
+  seconds run out with no guess submitted). Turns themselves are unlimited:
+  play just keeps cycling through everyone until someone wins.
+- **Hints**: a hint word is revealed automatically at the start of every
+  round, and then again every 12 turns as long as nobody has found the
+  secret word yet. Each new hint is guaranteed to be ranked closer to the
+  secret word than the best guess anyone has found so far, so hints get more
+  useful the longer a round drags on.
 - **Ranking**: every guess is scored by semantic closeness to the secret word,
   from #1 (exact word) up to the size of the vocabulary. Lower is closer.
 - **Win**: first player to guess rank #1 wins immediately. The secret word is
@@ -127,6 +134,13 @@ To avoid any per-guess ML inference cost, ranking is fully precomputed:
 
 Words outside the ~8,000-word vocabulary are treated as "unranked" and
 rejected with a friendly error rather than crashing or guessing wildly.
+
+**Hints** reuse the same precomputed rank list: a hint just looks up "the
+word at rank N" in the cached ordering for that round. The opening hint
+targets a generous starting rank (roughly the top ~5% closest words). Every
+12 turns after that, a new hint targets half the distance of the best rank
+any player has found so far, so it's always guaranteed closer than what's
+already on the board — capped so it never reveals rank #1 itself.
 
 ## Multiplayer architecture
 

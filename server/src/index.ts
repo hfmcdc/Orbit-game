@@ -61,6 +61,9 @@ registerBroadcasters({
       state: toPublicState(room),
     });
   },
+  onNewGuess: (room: Room, guess) => {
+    io.to(room.code).emit("new_guess", guess);
+  },
 });
 
 io.on("connection", (socket: Socket) => {

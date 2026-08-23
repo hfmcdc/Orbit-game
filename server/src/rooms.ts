@@ -1,6 +1,7 @@
 import { randomUUID } from "crypto";
 import {
   buildRankingForSecret,
+  getVocabSize,
   isKnownWord,
   normalizeWord,
   pickSecretWord,
@@ -19,6 +20,8 @@ export const MAX_PLAYERS = 4;
 export const MIN_PLAYERS = 2;
 const MAX_GUESS_HISTORY = 50;
 const DISCONNECT_REMOVAL_MS = 60_000; // remove disconnected players after 60s
+const HINT_INTERVAL_TURNS = 12; // reveal a new hint every 12 turns (12 x 15s)
+const HINT_SYSTEM_ID = "system";
 
 interface Player {
   id: string;
@@ -43,10 +46,14 @@ interface Room {
   turnTimer: NodeJS.Timeout | null;
   secretWord: string | null;
   rankMap: Map<string, number> | null;
+  orderedWords: string[] | null; // orderedWords[i] has rank i+1; used to build hints
   guesses: GuessResult[];
   winnerId: string | null;
   round: number;
   createdAt: number;
+  turnsCompleted: number; // total turns finished this round, across all players
+  hintedWords: Set<string>; // words already revealed as hints this round
+  lastHintRank: number; // rank of the most recently revealed hint
 }
 
 const rooms = new Map<string, Room>();
@@ -94,10 +101,14 @@ export function createRoom(hostNickname: string, hostSocketId: string) {
     turnTimer: null,
     secretWord: null,
     rankMap: null,
+    orderedWords: null,
     guesses: [],
     winnerId: null,
     round: 0,
     createdAt: Date.now(),
+    turnsCompleted: 0,
+    hintedWords: new Set(),
+    lastHintRank: 0,
   };
   rooms.set(code, room);
   return { room, playerId: hostId };
@@ -183,6 +194,7 @@ type Broadcasters = {
   onRoomState: (room: Room) => void;
   onTurnTick: (room: Room) => void;
   onGameOver: (room: Room) => void;
+  onNewGuess: (room: Room, guess: GuessResult) => void;
 };
 
 let broadcasters: Broadcasters | null = null;
@@ -204,6 +216,67 @@ function activeOrderIndices(room: Room): number[] {
     if (p && p.connected) idxs.push(i);
   });
   return idxs;
+}
+
+/**
+ * Find a word to reveal as a hint, targeting a specific rank but searching
+ * outward from it if that exact word has already been guessed or hinted
+ * (so hints never repeat something already on the board).
+ */
+function findHintWord(room: Room, targetRank: number): { word: string; rank: number } | null {
+  if (!room.orderedWords) return null;
+  const n = room.orderedWords.length;
+  const used = new Set(room.hintedWords);
+  for (const p of room.players.values()) {
+    for (const w of p.guessedWords) used.add(w);
+  }
+
+  const target = Math.min(Math.max(targetRank, 2), n); // never hint rank 1 (the answer itself)
+  for (let offset = 0; offset < n; offset++) {
+    for (const r of [target - offset, target + offset]) {
+      if (r >= 2 && r <= n) {
+        const word = room.orderedWords[r - 1];
+        if (!used.has(word)) {
+          return { word, rank: r };
+        }
+      }
+    }
+  }
+  return null;
+}
+
+/** Reveal a hint word at (or near) the given target rank, broadcast it to the room. */
+function revealHint(room: Room, targetRank: number) {
+  const found = findHintWord(room, targetRank);
+  if (!found) return;
+  room.hintedWords.add(found.word);
+  room.lastHintRank = found.rank;
+
+  const hint: GuessResult = {
+    id: randomUUID(),
+    playerId: HINT_SYSTEM_ID,
+    nickname: "Hint",
+    word: found.word,
+    rank: found.rank,
+    createdAt: Date.now(),
+    isHint: true,
+  };
+  room.guesses.unshift(hint);
+  if (room.guesses.length > MAX_GUESS_HISTORY) room.guesses.pop();
+  broadcasters?.onNewGuess(room, hint);
+}
+
+/** The rank a fresh hint should target: closer than anyone's best guess so far. */
+function nextHintTargetRank(room: Room): number {
+  let bestRank = Infinity;
+  for (const p of room.players.values()) {
+    if (p.bestRank !== null && p.bestRank < bestRank) bestRank = p.bestRank;
+  }
+  if (bestRank === Infinity) {
+    // Nobody has found anything ranked yet — halve the distance from the last hint.
+    return Math.max(2, Math.floor(room.lastHintRank / 2));
+  }
+  return Math.max(2, Math.floor(bestRank / 2));
 }
 
 function advanceTurn(room: Room) {
@@ -233,6 +306,15 @@ function advanceTurn(room: Room) {
     guard++;
   }
   room.currentTurnIndex = next;
+
+  // Every HINT_INTERVAL_TURNS completed turns, reveal a new hint that's
+  // guaranteed closer than the best guess found so far — this only ever
+  // fires while the round is still ongoing, i.e. nobody has found #1 yet.
+  room.turnsCompleted += 1;
+  if (room.turnsCompleted % HINT_INTERVAL_TURNS === 0) {
+    revealHint(room, nextHintTargetRank(room));
+  }
+
   startTurnTimer(room);
 }
 
@@ -274,9 +356,20 @@ function beginRound(room: Room) {
   room.guesses = [];
   room.winnerId = null;
   room.secretWord = pickSecretWord();
-  room.rankMap = buildRankingForSecret(room.secretWord);
+  const { rankMap, orderedWords } = buildRankingForSecret(room.secretWord);
+  room.rankMap = rankMap;
+  room.orderedWords = orderedWords;
   room.status = "playing";
   room.round += 1;
+  room.turnsCompleted = 0;
+  room.hintedWords = new Set();
+
+  // Opening hint: a generous starting foothold, revealed before anyone has
+  // guessed anything (roughly top ~5% closest words in the vocabulary).
+  const vocabSize = getVocabSize();
+  const openingHintRank = Math.max(50, Math.floor(vocabSize / 20));
+  room.lastHintRank = openingHintRank;
+  revealHint(room, openingHintRank);
 
   // Start with the first active player
   const active = activeOrderIndices(room);
@@ -359,8 +452,11 @@ export function submitGuess(room: Room, playerId: string, rawWord: string) {
     return { ok: true as const, guess, wonGame: true };
   }
 
-  // Guess doesn't end the turn; player may keep guessing until timer expires.
-  broadcasters?.onRoomState(room); // updates best ranks for all
+  // Each player gets exactly one guess per turn: end this turn right away
+  // and hand it to the next player. Turns themselves are unlimited — play
+  // keeps cycling through everyone until someone reaches #1.
+  clearTurnTimer(room);
+  advanceTurn(room);
   return { ok: true as const, guess, wonGame: false };
 }
 

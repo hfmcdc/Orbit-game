@@ -101,9 +101,16 @@ export function pickSecretWord(): string {
 /**
  * Build a full rank list for a secret word: an ordered array of vocab words
  * from most similar (rank 1, the secret word itself) to least similar.
- * Returns a Map from word -> rank (1-indexed) for O(1) lookups thereafter.
+ * Returns both a Map from word -> rank (1-indexed) for O(1) guess lookups,
+ * and the ordered word array itself so the server can look up "what word
+ * sits at rank N" — used to generate hints at a specific rank.
  */
-export function buildRankingForSecret(secretWord: string): Map<string, number> {
+export interface RankingResult {
+  rankMap: Map<string, number>;
+  orderedWords: string[]; // orderedWords[i] has rank i+1
+}
+
+export function buildRankingForSecret(secretWord: string): RankingResult {
   if (!store) throw new Error("vocab not loaded");
   const secretVec = store.getVector(secretWord);
   if (!secretVec) {
@@ -127,10 +134,13 @@ export function buildRankingForSecret(secretWord: string): Map<string, number> {
   indices.sort((a, b) => scores[b] - scores[a]);
 
   const rankMap = new Map<string, number>();
+  const orderedWords: string[] = new Array(n);
   for (let rank = 0; rank < indices.length; rank++) {
-    rankMap.set(store.words[indices[rank]], rank + 1);
+    const word = store.words[indices[rank]];
+    rankMap.set(word, rank + 1);
+    orderedWords[rank] = word;
   }
-  return rankMap;
+  return { rankMap, orderedWords };
 }
 
 export function getVocabSize(): number {
