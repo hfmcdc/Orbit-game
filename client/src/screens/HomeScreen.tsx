@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Button } from "../components/Button";
 import { TextField } from "../components/TextField";
 import { HowToPlayModal } from "../components/HowToPlayModal";
+import { InstallPrompt } from "../components/InstallPrompt";
 
 interface HomeScreenProps {
   busy: boolean;
@@ -33,6 +34,7 @@ export function HomeScreen({ busy, onCreate, onJoin, initialRoomCode }: HomeScre
 
         {mode === "start" && (
           <div className="flex flex-col gap-3">
+            <InstallPrompt />
             <Button fullWidth onClick={() => setMode("create")}>
               Create a room
             </Button>

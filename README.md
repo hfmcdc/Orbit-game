@@ -45,6 +45,13 @@ orbit/
   minutes.
 - **Play again**: the host can start a new round with a new secret word,
   same lobby, same players.
+- **Play like an app**: the Home screen shows an "Add to Home Screen" prompt
+  before joining or creating a room. On Android/Chrome it's a one-tap native
+  install button; on iOS Safari (which has no install API) it shows
+  instructions for the manual Share → Add to Home Screen flow. Once added,
+  Orbit opens full-screen with no browser chrome, like a real app. The
+  prompt hides itself automatically once the app is already installed, and
+  stays dismissed for 7 days if closed.
 
 ## Local development
 
