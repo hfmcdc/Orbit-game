@@ -51,6 +51,9 @@ export function LobbyScreen({ state, myPlayerId, onStart, onLeave }: LobbyScreen
       <div className="w-full max-w-sm mx-auto flex-1 flex flex-col">
         <div className="text-center mb-8">
           <p className="text-text-dim text-sm font-medium tracking-wide uppercase">Orbit</p>
+          <p className="text-text-dim/50 text-[11px] mt-0.5">
+            Made by <span className="text-text-dim/70">Mr.Mallu_gg</span>
+          </p>
           <div className="mt-3 inline-flex items-center gap-2 bg-panel-2 border border-border-subtle rounded-2xl px-5 py-3">
             <span className="font-mono text-2xl tracking-[0.2em]">{state.roomCode}</span>
           </div>
@@ -123,10 +126,6 @@ export function LobbyScreen({ state, myPlayerId, onStart, onLeave }: LobbyScreen
             Leave lobby
           </Button>
         </div>
-
-        <p className="text-center text-text-dim/60 text-xs mt-6">
-          Made by <span className="text-text-dim">Mr.Mallu_gg</span>
-        </p>
       </div>
       <HowToPlayModal open={howToPlayOpen} onClose={() => setHowToPlayOpen(false)} />
     </div>
