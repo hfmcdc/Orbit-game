@@ -18,7 +18,8 @@ function App() {
 
   return (
     <>
-      <Toast message={game.error} onDismiss={game.dismissError} />
+      <Toast message={game.error} onDismiss={game.dismissError} variant="error" />
+      <Toast message={game.notice} onDismiss={game.dismissNotice} variant="info" />
 
       {!game.connected && !game.state && (
         <div className="min-h-dvh flex items-center justify-center text-text-dim text-sm">
@@ -51,6 +52,8 @@ function App() {
           flashGuess={game.flashGuess}
           onSubmitGuess={game.submitGuess}
           onLeave={game.leaveRoom}
+          onRequestGiveUp={game.requestGiveUp}
+          onVote={game.castVote}
         />
       )}
 

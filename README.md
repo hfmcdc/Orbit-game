@@ -36,6 +36,13 @@ orbit/
   from #1 (exact word) up to the size of the vocabulary. Lower is closer.
 - **Win**: first player to guess rank #1 wins immediately. The secret word is
   revealed only at that point — it is never sent to any client beforehand.
+- **Give up**: any player can tap the 🏳️ button (top right, during a round)
+  to call a vote to end it early. This pauses the turn timer and opens a
+  20-second vote. If more players vote yes than no, the round ends
+  immediately and whoever has the closest guess so far wins (the word is
+  revealed either way). If the vote fails, the round resumes with a fresh
+  turn timer, and nobody can call another give-up vote in that room for 5
+  minutes.
 - **Play again**: the host can start a new round with a new secret word,
   same lobby, same players.
 
@@ -175,11 +182,22 @@ during development, covering:
 - Room creation/joining, 4-player cap, 5th-player rejection
 - Non-host start rejection, host-only start with < 2 players rejected
 - Turn enforcement (guessing out of turn is rejected)
+- One guess per turn: a second guess attempt in the same turn is rejected,
+  and a valid guess immediately advances the turn to the next player
 - Duplicate guess rejection, unknown-word rejection, empty-guess rejection
 - Automatic turn advancement when the 15-second timer expires
+- Hints: an opening hint appears the instant a round starts, a new hint
+  appears exactly at turn 12, and each new hint's rank is verified to be
+  closer than the best guess found by any player at that point
 - Full win flow: correct guess ends the game immediately, no further guesses
   are accepted, and the secret word is confirmed to stay `null` in every
   broadcast state until the round finishes
+- Give-up voting: the turn timer pauses while a vote is open, the initiator
+  auto-votes yes, a majority-yes vote ends the round with the closest-guess
+  player declared winner (or no winner if nobody has a ranked guess yet), a
+  majority-no vote resumes play and puts the room's give-up button on a
+  5-minute cooldown, and a repeat vote attempt during that cooldown is
+  rejected
 
 To re-verify locally, start the server (`npm run dev` in `server/`) and open
 several browser tabs/devices to `http://localhost:5173` (or your deployed
@@ -192,7 +210,15 @@ manual checks:
   players joined, and that letting the timer hit 0 skips to the next player.
 - **Guessing**: try guessing when it isn't your turn (should be blocked
   client-side and rejected server-side if forced), submit a duplicate word,
-  submit gibberish, and submit multiple valid guesses in one turn.
+  submit gibberish, and confirm a single valid guess ends your turn
+  immediately (no second guess allowed until it's your turn again).
+- **Hints**: confirm a hint appears in the feed the moment the round starts,
+  and that another one appears right after the 12th completed turn.
+- **Give up**: tap 🏳️ on one device mid-round; confirm all devices see the
+  vote modal with a live countdown and vote tallies. Vote it down and confirm
+  the round resumes and the button is disabled/cooldown-limited for 5
+  minutes; in a fresh round, vote it through and confirm the round ends with
+  the closest guesser declared winner and the word revealed.
 - **Winning**: keep guessing until someone reaches #1; confirm the win screen
   shows correctly on all devices, including for non-winners.
 - **Mobile**: check at roughly 360×800, 390×844, and 412×915 — the layout is

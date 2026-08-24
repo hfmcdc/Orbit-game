@@ -21,6 +21,16 @@ export interface GuessResult {
   isHint?: boolean; // true if this entry is a system-generated hint, not a player guess
 }
 
+export type VoteChoice = "yes" | "no";
+
+export interface VoteState {
+  active: boolean;
+  initiatorId: string | null;
+  deadline: number | null; // epoch ms, authoritative from server
+  voteSeconds: number;
+  votes: Record<string, VoteChoice>; // playerId -> choice, only includes players who voted
+}
+
 export interface RoomStateForClient {
   roomCode: string;
   status: GameStatus;
@@ -33,6 +43,9 @@ export interface RoomStateForClient {
   winnerId: string | null;
   secretWord: string | null; // only populated when status === 'finished'
   round: number;
+  vote: VoteState;
+  giveUpAvailableAt: number; // epoch ms; 0 or <= now means available right now
+  endedByGiveUp: boolean; // true if the round ended via a successful give-up vote
 }
 
 // ---- Client -> Server events ----
@@ -56,6 +69,11 @@ export interface ClientToServerEvents {
   ) => void;
   play_again: (payload: {}, cb: (res: { ok: true } | { ok: false; error: string }) => void) => void;
   leave_room: (payload: {}, cb: (res: { ok: true } | { ok: false; error: string }) => void) => void;
+  request_give_up: (payload: {}, cb: (res: { ok: true } | { ok: false; error: string }) => void) => void;
+  cast_vote: (
+    payload: { choice: VoteChoice },
+    cb: (res: { ok: true } | { ok: false; error: string }) => void
+  ) => void;
 }
 
 // ---- Server -> Client events ----
@@ -64,7 +82,8 @@ export interface ServerToClientEvents {
   new_guess: (guess: GuessResult) => void;
   turn_tick: (payload: { currentPlayerId: string; turnDeadline: number }) => void;
   game_started: (state: RoomStateForClient) => void;
-  game_over: (payload: { winnerId: string; secretWord: string; state: RoomStateForClient }) => void;
+  game_over: (payload: { winnerId: string | null; secretWord: string; state: RoomStateForClient }) => void;
+  vote_concluded: (payload: { passed: boolean }) => void;
   player_joined: (payload: { player: PlayerPublic }) => void;
   player_left: (payload: { playerId: string }) => void;
   error_message: (payload: { message: string }) => void;

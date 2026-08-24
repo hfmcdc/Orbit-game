@@ -5,6 +5,7 @@ import cors from "cors";
 import { Server, Socket } from "socket.io";
 import { loadVocab } from "./semantics";
 import {
+  castVote,
   createRoom,
   findRoomByPlayerId,
   getRoom,
@@ -15,6 +16,7 @@ import {
   reconnectPlayer,
   registerBroadcasters,
   removePlayer,
+  requestGiveUp,
   sanitizeNickname,
   startGame,
   submitGuess,
@@ -56,13 +58,16 @@ registerBroadcasters({
   },
   onGameOver: (room: Room) => {
     io.to(room.code).emit("game_over", {
-      winnerId: room.winnerId!,
+      winnerId: room.winnerId,
       secretWord: room.secretWord!,
       state: toPublicState(room),
     });
   },
   onNewGuess: (room: Room, guess) => {
     io.to(room.code).emit("new_guess", guess);
+  },
+  onVoteConcluded: (room: Room, passed: boolean) => {
+    io.to(room.code).emit("vote_concluded", { passed });
   },
 });
 
@@ -147,6 +152,34 @@ io.on("connection", (socket: Socket) => {
       io.to(room.code).emit("new_guess", result.guess);
     } catch (e) {
       cb({ ok: false, error: "Failed to submit guess." });
+    }
+  });
+
+  socket.on("request_give_up", (_payload, cb) => {
+    try {
+      const info = socketToPlayer.get(socket.id);
+      if (!info) return cb({ ok: false, error: "Not in a room." });
+      const room = getRoom(info.roomCode);
+      if (!room) return cb({ ok: false, error: "Room not found." });
+      const result = requestGiveUp(room, info.playerId);
+      if (!result.ok) return cb({ ok: false, error: result.error });
+      cb({ ok: true });
+    } catch (e) {
+      cb({ ok: false, error: "Failed to start a give-up vote." });
+    }
+  });
+
+  socket.on("cast_vote", (payload, cb) => {
+    try {
+      const info = socketToPlayer.get(socket.id);
+      if (!info) return cb({ ok: false, error: "Not in a room." });
+      const room = getRoom(info.roomCode);
+      if (!room) return cb({ ok: false, error: "Room not found." });
+      const result = castVote(room, info.playerId, payload?.choice);
+      if (!result.ok) return cb({ ok: false, error: result.error });
+      cb({ ok: true });
+    } catch (e) {
+      cb({ ok: false, error: "Failed to cast vote." });
     }
   });
 

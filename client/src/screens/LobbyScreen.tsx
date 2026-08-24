@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Button } from "../components/Button";
+import { HowToPlayModal } from "../components/HowToPlayModal";
 import type { RoomStateForClient } from "../shared/types";
 
 interface LobbyScreenProps {
@@ -11,6 +12,7 @@ interface LobbyScreenProps {
 
 export function LobbyScreen({ state, myPlayerId, onStart, onLeave }: LobbyScreenProps) {
   const [copied, setCopied] = useState(false);
+  const [howToPlayOpen, setHowToPlayOpen] = useState(false);
   const isHost = myPlayerId === state.hostId;
   const count = state.players.length;
   const canStart = count >= 2;
@@ -66,6 +68,12 @@ export function LobbyScreen({ state, myPlayerId, onStart, onLeave }: LobbyScreen
               Share link
             </button>
           </div>
+          <button
+            onClick={() => setHowToPlayOpen(true)}
+            className="text-text-dim hover:text-text-primary text-sm mt-3 underline underline-offset-4"
+          >
+            How to play
+          </button>
         </div>
 
         <div className="flex-1">
@@ -115,7 +123,12 @@ export function LobbyScreen({ state, myPlayerId, onStart, onLeave }: LobbyScreen
             Leave lobby
           </Button>
         </div>
+
+        <p className="text-center text-text-dim/60 text-xs mt-6">
+          Made by <span className="text-text-dim">Mr.Mallu_gg</span>
+        </p>
       </div>
+      <HowToPlayModal open={howToPlayOpen} onClose={() => setHowToPlayOpen(false)} />
     </div>
   );
 }

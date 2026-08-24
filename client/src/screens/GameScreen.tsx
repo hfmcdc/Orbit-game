@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { Button } from "../components/Button";
 import { ProximityRing } from "../components/ProximityRing";
+import { GiveUpVoteModal } from "../components/GiveUpVoteModal";
 import { useCountdown } from "../lib/useCountdown";
-import type { GuessResult, RoomStateForClient } from "../shared/types";
+import type { GuessResult, RoomStateForClient, VoteChoice } from "../shared/types";
 
 interface GameScreenProps {
   state: RoomStateForClient;
@@ -10,9 +11,19 @@ interface GameScreenProps {
   flashGuess: GuessResult | null;
   onSubmitGuess: (word: string, onDone?: (ok: boolean) => void) => void;
   onLeave: () => void;
+  onRequestGiveUp: () => void;
+  onVote: (choice: VoteChoice) => void;
 }
 
-export function GameScreen({ state, myPlayerId, flashGuess, onSubmitGuess, onLeave }: GameScreenProps) {
+export function GameScreen({
+  state,
+  myPlayerId,
+  flashGuess,
+  onSubmitGuess,
+  onLeave,
+  onRequestGiveUp,
+  onVote,
+}: GameScreenProps) {
   const [guessValue, setGuessValue] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [locked, setLocked] = useState(false); // true right after submitting, until the turn actually moves on
@@ -49,7 +60,7 @@ export function GameScreen({ state, myPlayerId, flashGuess, onSubmitGuess, onLea
   };
 
   const urgent = remaining <= 5;
-  const canType = isMyTurn && !submitting && !locked;
+  const canType = isMyTurn && !submitting && !locked && !state.vote.active;
 
   return (
     <div className="min-h-dvh flex flex-col px-4 py-5">
@@ -60,9 +71,20 @@ export function GameScreen({ state, myPlayerId, flashGuess, onSubmitGuess, onLea
             <p className="text-text-dim text-xs uppercase tracking-wide font-medium">Orbit</p>
             <p className="font-mono text-sm text-text-dim">{state.roomCode}</p>
           </div>
-          <button onClick={onLeave} className="text-text-dim text-sm hover:text-accent-danger">
-            Leave
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={onRequestGiveUp}
+              disabled={state.vote.active}
+              aria-label="Call a give-up vote"
+              title="Call a give-up vote"
+              className="text-xl leading-none px-2 py-1.5 rounded-xl bg-panel-2 border border-border-subtle hover:border-accent-danger/60 disabled:opacity-40 transition-colors"
+            >
+              🏳️
+            </button>
+            <button onClick={onLeave} className="text-text-dim text-sm hover:text-accent-danger">
+              Leave
+            </button>
+          </div>
         </div>
 
         {/* Player ranks */}
@@ -208,6 +230,7 @@ export function GameScreen({ state, myPlayerId, flashGuess, onSubmitGuess, onLea
           </ul>
         </div>
       </div>
+      <GiveUpVoteModal state={state} myPlayerId={myPlayerId} onVote={onVote} />
     </div>
   );
 }

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { socket } from "./socket";
 import { clearSession, loadSession, saveSession } from "./session";
-import type { GuessResult, RoomStateForClient } from "../shared/types";
+import type { GuessResult, RoomStateForClient, VoteChoice } from "../shared/types";
 
 export type Screen = "home" | "lobby" | "game" | "win";
 
@@ -11,9 +11,11 @@ export function useGame() {
   const [state, setState] = useState<RoomStateForClient | null>(null);
   const [myPlayerId, setMyPlayerId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [flashGuess, setFlashGuess] = useState<GuessResult | null>(null);
   const errorTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const noticeTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const flashTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const attemptedRejoin = useRef(false);
 
@@ -21,6 +23,12 @@ export function useGame() {
     setError(message);
     if (errorTimeout.current) clearTimeout(errorTimeout.current);
     errorTimeout.current = setTimeout(() => setError(null), 4000);
+  }, []);
+
+  const showNotice = useCallback((message: string) => {
+    setNotice(message);
+    if (noticeTimeout.current) clearTimeout(noticeTimeout.current);
+    noticeTimeout.current = setTimeout(() => setNotice(null), 4000);
   }, []);
 
   useEffect(() => {
@@ -61,7 +69,7 @@ export function useGame() {
       setState(s);
       setScreen("game");
     }
-    function onGameOver(payload: { winnerId: string; secretWord: string; state: RoomStateForClient }) {
+    function onGameOver(payload: { winnerId: string | null; secretWord: string; state: RoomStateForClient }) {
       setState(payload.state);
       setScreen("win");
     }
@@ -69,6 +77,11 @@ export function useGame() {
       setFlashGuess(g);
       if (flashTimeout.current) clearTimeout(flashTimeout.current);
       flashTimeout.current = setTimeout(() => setFlashGuess(null), 1200);
+    }
+    function onVoteConcluded(payload: { passed: boolean }) {
+      if (!payload.passed) {
+        showNotice("Give-up vote failed — the game continues! Try again in 5 minutes.");
+      }
     }
     function onErrorMessage(payload: { message: string }) {
       showError(payload.message);
@@ -80,6 +93,7 @@ export function useGame() {
     socket.on("game_started", onGameStarted);
     socket.on("game_over", onGameOver);
     socket.on("new_guess", onNewGuess);
+    socket.on("vote_concluded", onVoteConcluded);
     socket.on("error_message", onErrorMessage);
 
     return () => {
@@ -89,9 +103,10 @@ export function useGame() {
       socket.off("game_started", onGameStarted);
       socket.off("game_over", onGameOver);
       socket.off("new_guess", onNewGuess);
+      socket.off("vote_concluded", onVoteConcluded);
       socket.off("error_message", onErrorMessage);
     };
-  }, [showError]);
+  }, [showError, showNotice]);
 
   const createRoom = useCallback(
     (nickname: string) => {
@@ -162,6 +177,21 @@ export function useGame() {
     });
   }, []);
 
+  const requestGiveUp = useCallback(() => {
+    socket.emit("request_give_up", {}, (res) => {
+      if (!res.ok) showError(res.error);
+    });
+  }, [showError]);
+
+  const castVote = useCallback(
+    (choice: VoteChoice) => {
+      socket.emit("cast_vote", { choice }, (res) => {
+        if (!res.ok) showError(res.error);
+      });
+    },
+    [showError]
+  );
+
   return {
     screen,
     setScreen,
@@ -169,6 +199,7 @@ export function useGame() {
     state,
     myPlayerId,
     error,
+    notice,
     busy,
     flashGuess,
     createRoom,
@@ -177,6 +208,9 @@ export function useGame() {
     submitGuess,
     playAgain,
     leaveRoom,
+    requestGiveUp,
+    castVote,
     dismissError: () => setError(null),
+    dismissNotice: () => setNotice(null),
   };
 }

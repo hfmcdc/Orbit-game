@@ -9,10 +9,11 @@ interface WinScreenProps {
 }
 
 export function WinScreen({ state, myPlayerId, onPlayAgain, onLeave }: WinScreenProps) {
-  const winner = state.players.find((p) => p.id === state.winnerId);
-  const iWon = state.winnerId === myPlayerId;
+  const winner = state.winnerId ? state.players.find((p) => p.id === state.winnerId) : undefined;
+  const iWon = state.winnerId !== null && state.winnerId === myPlayerId;
   const isHost = myPlayerId === state.hostId;
   const me = state.players.find((p) => p.id === myPlayerId);
+  const noWinner = state.winnerId === null;
 
   const sorted = [...state.players].sort((a, b) => {
     if (a.bestRank === null) return 1;
@@ -20,13 +21,24 @@ export function WinScreen({ state, myPlayerId, onPlayAgain, onLeave }: WinScreen
     return a.bestRank - b.bestRank;
   });
 
+  const heading = noWinner
+    ? "Round ended"
+    : iWon
+      ? "You win!"
+      : `${winner?.nickname ?? "Someone"} wins!`;
+
   return (
     <div className="min-h-dvh flex flex-col items-center justify-center px-6 py-10">
       <div className="w-full max-w-sm flex flex-col items-center text-center">
-        <div className="text-5xl mb-3">🏆</div>
-        <h1 className="font-display font-800 text-3xl tracking-tight">
-          {iWon ? "You win!" : `${winner?.nickname ?? "Someone"} wins!`}
-        </h1>
+        <div className="text-5xl mb-3">{state.endedByGiveUp ? "🏳️" : "🏆"}</div>
+        <h1 className="font-display font-800 text-3xl tracking-tight">{heading}</h1>
+        {state.endedByGiveUp && (
+          <p className="text-text-dim text-sm mt-1">
+            {noWinner
+              ? "The give-up vote passed before anyone had a ranked guess."
+              : "The give-up vote passed — closest guess wins."}
+          </p>
+        )}
 
         <div className="mt-6 bg-panel-2 border border-accent-win/30 rounded-2xl px-6 py-5 w-full">
           <p className="text-text-dim text-sm uppercase tracking-wide">The word was</p>
@@ -35,11 +47,11 @@ export function WinScreen({ state, myPlayerId, onPlayAgain, onLeave }: WinScreen
           </p>
         </div>
 
-        {iWon && (
+        {iWon && me?.bestRank && (
           <div className="flex gap-6 mt-6">
             <div>
               <p className="text-text-dim text-xs uppercase tracking-wide">Best rank</p>
-              <p className="font-mono text-2xl font-bold text-accent-core">#{me?.bestRank}</p>
+              <p className="font-mono text-2xl font-bold text-accent-core">#{me.bestRank}</p>
             </div>
             <div>
               <p className="text-text-dim text-xs uppercase tracking-wide">Guesses</p>
@@ -56,7 +68,7 @@ export function WinScreen({ state, myPlayerId, onPlayAgain, onLeave }: WinScreen
             >
               <span className="text-text-dim font-mono text-sm w-5">{i + 1}</span>
               <span className="flex-1 text-left font-medium">
-                {p.id === state.winnerId && "🏆 "}
+                {p.id === state.winnerId && (state.endedByGiveUp ? "🏳️ " : "🏆 ")}
                 {p.nickname}
                 {p.id === myPlayerId && <span className="text-text-dim"> (you)</span>}
               </span>

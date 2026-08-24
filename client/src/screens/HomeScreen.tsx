@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Button } from "../components/Button";
 import { TextField } from "../components/TextField";
+import { HowToPlayModal } from "../components/HowToPlayModal";
 
 interface HomeScreenProps {
   busy: boolean;
@@ -15,6 +16,7 @@ export function HomeScreen({ busy, onCreate, onJoin, initialRoomCode }: HomeScre
   );
   const [nickname, setNickname] = useState("");
   const [roomCode, setRoomCode] = useState(initialRoomCode ?? "");
+  const [howToPlayOpen, setHowToPlayOpen] = useState(false);
 
   return (
     <div className="min-h-dvh flex flex-col items-center justify-center px-6 py-10">
@@ -37,6 +39,13 @@ export function HomeScreen({ busy, onCreate, onJoin, initialRoomCode }: HomeScre
             <Button fullWidth variant="secondary" onClick={() => setMode("join")}>
               Join a room
             </Button>
+            <button
+              type="button"
+              onClick={() => setHowToPlayOpen(true)}
+              className="text-text-dim hover:text-text-primary text-sm mt-2 py-2 underline underline-offset-4"
+            >
+              How to play
+            </button>
           </div>
         )}
 
@@ -108,6 +117,7 @@ export function HomeScreen({ busy, onCreate, onJoin, initialRoomCode }: HomeScre
           </form>
         )}
       </div>
+      <HowToPlayModal open={howToPlayOpen} onClose={() => setHowToPlayOpen(false)} />
     </div>
   );
 }

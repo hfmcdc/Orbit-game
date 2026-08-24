@@ -22,6 +22,8 @@ const MAX_GUESS_HISTORY = 50;
 const DISCONNECT_REMOVAL_MS = 60_000; // remove disconnected players after 60s
 const HINT_INTERVAL_TURNS = 12; // reveal a new hint every 12 turns (12 x 15s)
 const HINT_SYSTEM_ID = "system";
+export const VOTE_SECONDS = 20; // how long a give-up vote stays open
+export const GIVEUP_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes after a failed vote
 
 interface Player {
   id: string;
@@ -33,6 +35,14 @@ interface Player {
   guessCount: number;
   guessedWords: Set<string>;
   disconnectedAt: number | null;
+}
+
+interface VoteInternal {
+  active: boolean;
+  initiatorId: string | null;
+  deadline: number | null;
+  votes: Map<string, "yes" | "no">;
+  timer: NodeJS.Timeout | null;
 }
 
 interface Room {
@@ -54,6 +64,9 @@ interface Room {
   turnsCompleted: number; // total turns finished this round, across all players
   hintedWords: Set<string>; // words already revealed as hints this round
   lastHintRank: number; // rank of the most recently revealed hint
+  vote: VoteInternal;
+  giveUpAvailableAt: number; // epoch ms; a new vote can't be called before this
+  endedByGiveUp: boolean;
 }
 
 const rooms = new Map<string, Room>();
@@ -109,6 +122,9 @@ export function createRoom(hostNickname: string, hostSocketId: string) {
     turnsCompleted: 0,
     hintedWords: new Set(),
     lastHintRank: 0,
+    vote: { active: false, initiatorId: null, deadline: null, votes: new Map(), timer: null },
+    giveUpAvailableAt: 0,
+    endedByGiveUp: false,
   };
   rooms.set(code, room);
   return { room, playerId: hostId };
@@ -185,6 +201,15 @@ export function toPublicState(room: Room): RoomStateForClient {
     winnerId: room.winnerId,
     secretWord: room.status === "finished" ? room.secretWord : null,
     round: room.round,
+    vote: {
+      active: room.vote.active,
+      initiatorId: room.vote.initiatorId,
+      deadline: room.vote.deadline,
+      voteSeconds: VOTE_SECONDS,
+      votes: Object.fromEntries(room.vote.votes),
+    },
+    giveUpAvailableAt: room.giveUpAvailableAt,
+    endedByGiveUp: room.endedByGiveUp,
   };
 }
 
@@ -195,6 +220,7 @@ type Broadcasters = {
   onTurnTick: (room: Room) => void;
   onGameOver: (room: Room) => void;
   onNewGuess: (room: Room, guess: GuessResult) => void;
+  onVoteConcluded: (room: Room, passed: boolean) => void;
 };
 
 let broadcasters: Broadcasters | null = null;
@@ -363,6 +389,10 @@ function beginRound(room: Room) {
   room.round += 1;
   room.turnsCompleted = 0;
   room.hintedWords = new Set();
+  clearVoteTimer(room);
+  room.vote = { active: false, initiatorId: null, deadline: null, votes: new Map(), timer: null };
+  room.giveUpAvailableAt = 0;
+  room.endedByGiveUp = false;
 
   // Opening hint: a generous starting foothold, revealed before anyone has
   // guessed anything (roughly top ~5% closest words in the vocabulary).
@@ -467,6 +497,152 @@ export function skipToNextTurnIfCurrent(room: Room, playerId: string) {
   }
 }
 
+// ---- Give-up voting ----
+
+function clearVoteTimer(room: Room) {
+  if (room.vote.timer) {
+    clearTimeout(room.vote.timer);
+    room.vote.timer = null;
+  }
+}
+
+/**
+ * Find the player who reached a given rank first, chronologically, by
+ * scanning the (recency-capped) guess history. Used to break ties when two
+ * or more players share the same best rank at the moment a give-up vote
+ * passes. Falls back to whichever player we already had if history for one
+ * side has aged out of the capped guess log.
+ */
+function earlierAchiever(room: Room, currentWinnerId: string, challengerId: string, rank: number): string {
+  let tCurrent = Infinity;
+  let tChallenger = Infinity;
+  for (const g of room.guesses) {
+    if (g.rank !== rank) continue;
+    if (g.playerId === currentWinnerId && g.createdAt < tCurrent) tCurrent = g.createdAt;
+    if (g.playerId === challengerId && g.createdAt < tChallenger) tChallenger = g.createdAt;
+  }
+  return tChallenger < tCurrent ? challengerId : currentWinnerId;
+}
+
+/** Whoever currently has the closest (lowest) best rank; null if nobody has guessed anything ranked. */
+function findBestRankWinner(room: Room): string | null {
+  let bestRank = Infinity;
+  let winnerId: string | null = null;
+  for (const p of room.players.values()) {
+    if (p.bestRank === null) continue;
+    if (p.bestRank < bestRank) {
+      bestRank = p.bestRank;
+      winnerId = p.id;
+    } else if (p.bestRank === bestRank && winnerId) {
+      winnerId = earlierAchiever(room, winnerId, p.id, bestRank);
+    }
+  }
+  return winnerId;
+}
+
+function resolveVote(room: Room) {
+  if (!room.vote.active) return;
+  clearVoteTimer(room);
+
+  let yes = 0;
+  let no = 0;
+  for (const choice of room.vote.votes.values()) {
+    if (choice === "yes") yes++;
+    else no++;
+  }
+  const passed = yes > no;
+
+  room.vote.active = false;
+  room.vote.initiatorId = null;
+  room.vote.deadline = null;
+  room.vote.votes = new Map();
+
+  if (passed) {
+    // The vote to give up succeeded: end the round now. Whoever has the
+    // closest (lowest) best rank so far wins, even though nobody actually
+    // reached #1.
+    room.status = "finished";
+    room.winnerId = findBestRankWinner(room);
+    room.endedByGiveUp = true;
+    clearTurnTimer(room);
+    room.turnDeadline = null;
+    broadcasters?.onGameOver(room);
+  } else {
+    // Vote failed: the game continues. Put this room's give-up ability on a
+    // 5-minute cooldown and resume with a fresh 15 seconds — for the current
+    // player if they're still connected, or advance past them if not.
+    room.giveUpAvailableAt = Date.now() + GIVEUP_COOLDOWN_MS;
+    const currentId = room.playerOrder[room.currentTurnIndex];
+    const currentPlayer = room.players.get(currentId);
+    if (currentPlayer && currentPlayer.connected) {
+      startTurnTimer(room);
+    } else {
+      advanceTurn(room);
+    }
+  }
+
+  broadcasters?.onVoteConcluded(room, passed);
+  broadcasters?.onRoomState(room);
+}
+
+export function requestGiveUp(room: Room, playerId: string) {
+  if (room.status !== "playing") {
+    return { ok: false as const, error: "There's no active round to give up on." };
+  }
+  const player = room.players.get(playerId);
+  if (!player || !player.connected) {
+    return { ok: false as const, error: "Player not found." };
+  }
+  if (room.vote.active) {
+    return { ok: false as const, error: "A give-up vote is already in progress." };
+  }
+  const now = Date.now();
+  if (now < room.giveUpAvailableAt) {
+    const mins = Math.ceil((room.giveUpAvailableAt - now) / 60000);
+    return {
+      ok: false as const,
+      error: `You can call another give-up vote in about ${mins} minute${mins === 1 ? "" : "s"}.`,
+    };
+  }
+
+  // Pause the turn while voting is in progress.
+  clearTurnTimer(room);
+  room.turnDeadline = null;
+
+  room.vote.active = true;
+  room.vote.initiatorId = playerId;
+  room.vote.deadline = now + VOTE_SECONDS * 1000;
+  room.vote.votes = new Map([[playerId, "yes"]]); // the person who calls the vote votes yes automatically
+  room.vote.timer = setTimeout(() => resolveVote(room), VOTE_SECONDS * 1000);
+
+  broadcasters?.onRoomState(room);
+  return { ok: true as const };
+}
+
+export function castVote(room: Room, playerId: string, choice: "yes" | "no") {
+  if (!room.vote.active) {
+    return { ok: false as const, error: "There's no vote in progress." };
+  }
+  if (choice !== "yes" && choice !== "no") {
+    return { ok: false as const, error: "Invalid vote." };
+  }
+  const player = room.players.get(playerId);
+  if (!player || !player.connected) {
+    return { ok: false as const, error: "Player not found." };
+  }
+
+  room.vote.votes.set(playerId, choice);
+  broadcasters?.onRoomState(room);
+
+  // Resolve early once every currently active player has voted.
+  const active = activePlayers(room);
+  const allVoted = active.every((p) => room.vote.votes.has(p.id));
+  if (allVoted) {
+    resolveVote(room);
+  }
+  return { ok: true as const };
+}
+
 export function markDisconnected(room: Room, playerId: string) {
   const player = room.players.get(playerId);
   if (!player) return;
@@ -474,7 +650,7 @@ export function markDisconnected(room: Room, playerId: string) {
   player.disconnectedAt = Date.now();
   player.socketId = null;
 
-  if (room.status === "playing") {
+  if (room.status === "playing" && !room.vote.active) {
     skipToNextTurnIfCurrent(room, playerId);
   }
 
@@ -490,6 +666,18 @@ export function markDisconnected(room: Room, playerId: string) {
   }
 
   scheduleRemoval(room, playerId);
+
+  // If a vote is in progress and every remaining connected player has now
+  // voted (or there simply aren't enough players left to keep waiting),
+  // resolve it early instead of leaving it hanging until the vote timer.
+  if (room.vote.active) {
+    const active = activePlayers(room);
+    if (active.length === 0 || active.every((p) => room.vote.votes.has(p.id))) {
+      resolveVote(room);
+      return;
+    }
+  }
+
   broadcasters?.onRoomState(room);
 }
 
@@ -534,11 +722,23 @@ export function removePlayer(room: Room, playerId: string) {
 
   if (room.playerOrder.length === 0) {
     clearTurnTimer(room);
+    clearVoteTimer(room);
     rooms.delete(room.code);
     return;
   }
 
-  if (wasCurrent && room.status === "playing") {
+  // Also clean up this player's vote and clean up when a pending vote is
+  // paused entirely.
+  if (room.vote.active) {
+    room.vote.votes.delete(playerId);
+    const active = activePlayers(room);
+    if (active.length === 0 || active.every((p) => room.vote.votes.has(p.id))) {
+      resolveVote(room);
+      return;
+    }
+  }
+
+  if (wasCurrent && room.status === "playing" && !room.vote.active) {
     const active = activeOrderIndices(room);
     if (active.length < MIN_PLAYERS) {
       room.status = "lobby";
