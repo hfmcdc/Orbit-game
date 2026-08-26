@@ -6,6 +6,7 @@ import {
   normalizeWord,
   pickSecretWord,
 } from "./semantics";
+import { findHintWord, nextHintTargetRank, openingHintRank } from "./hints";
 import type {
   GameStatus,
   GuessResult,
@@ -245,35 +246,21 @@ function activeOrderIndices(room: Room): number[] {
 }
 
 /**
- * Find a word to reveal as a hint, targeting a specific rank but searching
- * outward from it if that exact word has already been guessed or hinted
- * (so hints never repeat something already on the board).
+ * Build the "already used" word set for this room (hinted + every player's
+ * guessed words) and delegate to the shared hint-selection logic.
  */
-function findHintWord(room: Room, targetRank: number): { word: string; rank: number } | null {
+function findRoomHintWord(room: Room, targetRank: number): { word: string; rank: number } | null {
   if (!room.orderedWords) return null;
-  const n = room.orderedWords.length;
   const used = new Set(room.hintedWords);
   for (const p of room.players.values()) {
     for (const w of p.guessedWords) used.add(w);
   }
-
-  const target = Math.min(Math.max(targetRank, 2), n); // never hint rank 1 (the answer itself)
-  for (let offset = 0; offset < n; offset++) {
-    for (const r of [target - offset, target + offset]) {
-      if (r >= 2 && r <= n) {
-        const word = room.orderedWords[r - 1];
-        if (!used.has(word)) {
-          return { word, rank: r };
-        }
-      }
-    }
-  }
-  return null;
+  return findHintWord(room.orderedWords, used, targetRank);
 }
 
 /** Reveal a hint word at (or near) the given target rank, broadcast it to the room. */
 function revealHint(room: Room, targetRank: number) {
-  const found = findHintWord(room, targetRank);
+  const found = findRoomHintWord(room, targetRank);
   if (!found) return;
   room.hintedWords.add(found.word);
   room.lastHintRank = found.rank;
@@ -293,16 +280,12 @@ function revealHint(room: Room, targetRank: number) {
 }
 
 /** The rank a fresh hint should target: closer than anyone's best guess so far. */
-function nextHintTargetRank(room: Room): number {
-  let bestRank = Infinity;
+function nextRoomHintTargetRank(room: Room): number {
+  let bestRank: number | null = null;
   for (const p of room.players.values()) {
-    if (p.bestRank !== null && p.bestRank < bestRank) bestRank = p.bestRank;
+    if (p.bestRank !== null && (bestRank === null || p.bestRank < bestRank)) bestRank = p.bestRank;
   }
-  if (bestRank === Infinity) {
-    // Nobody has found anything ranked yet — halve the distance from the last hint.
-    return Math.max(2, Math.floor(room.lastHintRank / 2));
-  }
-  return Math.max(2, Math.floor(bestRank / 2));
+  return nextHintTargetRank(bestRank, room.lastHintRank);
 }
 
 function advanceTurn(room: Room) {
@@ -338,7 +321,7 @@ function advanceTurn(room: Room) {
   // fires while the round is still ongoing, i.e. nobody has found #1 yet.
   room.turnsCompleted += 1;
   if (room.turnsCompleted % HINT_INTERVAL_TURNS === 0) {
-    revealHint(room, nextHintTargetRank(room));
+    revealHint(room, nextRoomHintTargetRank(room));
   }
 
   startTurnTimer(room);
@@ -397,9 +380,9 @@ function beginRound(room: Room) {
   // Opening hint: a generous starting foothold, revealed before anyone has
   // guessed anything (roughly top ~5% closest words in the vocabulary).
   const vocabSize = getVocabSize();
-  const openingHintRank = Math.max(50, Math.floor(vocabSize / 20));
-  room.lastHintRank = openingHintRank;
-  revealHint(room, openingHintRank);
+  const openingRank = openingHintRank(vocabSize);
+  room.lastHintRank = openingRank;
+  revealHint(room, openingRank);
 
   // Start with the first active player
   const active = activeOrderIndices(room);

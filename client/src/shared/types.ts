@@ -48,6 +48,28 @@ export interface RoomStateForClient {
   endedByGiveUp: boolean; // true if the round ended via a successful give-up vote
 }
 
+export type SoloMode = "practice" | "daily";
+export type SoloStatus = "playing" | "finished";
+
+export interface SoloGuessResult {
+  id: string;
+  word: string;
+  rank: number; // 1..vocabSize, or -1 if unranked
+  createdAt: number;
+  isHint?: boolean;
+}
+
+export interface SoloStateForClient {
+  soloId: string;
+  mode: SoloMode;
+  status: SoloStatus;
+  dateKey: string | null; // set for daily mode, the calendar date this challenge belongs to
+  bestRank: number | null;
+  guessCount: number;
+  guesses: SoloGuessResult[]; // most recent first
+  secretWord: string | null; // only populated when status === 'finished'
+}
+
 // ---- Client -> Server events ----
 export interface ClientToServerEvents {
   create_room: (
@@ -74,6 +96,19 @@ export interface ClientToServerEvents {
     payload: { choice: VoteChoice },
     cb: (res: { ok: true } | { ok: false; error: string }) => void
   ) => void;
+  start_solo: (
+    payload: { mode: SoloMode },
+    cb: (res: { ok: true; state: SoloStateForClient } | { ok: false; error: string }) => void
+  ) => void;
+  solo_guess: (
+    payload: { soloId: string; word: string },
+    cb: (res: { ok: true; state: SoloStateForClient } | { ok: false; error: string }) => void
+  ) => void;
+  solo_new_game: (
+    payload: { soloId: string },
+    cb: (res: { ok: true; state: SoloStateForClient } | { ok: false; error: string }) => void
+  ) => void;
+  leave_solo: (payload: { soloId: string }, cb: (res: { ok: true } | { ok: false; error: string }) => void) => void;
 }
 
 // ---- Server -> Client events ----

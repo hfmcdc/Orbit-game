@@ -5,16 +5,22 @@ import { LobbyScreen } from "./screens/LobbyScreen";
 import { GameScreen } from "./screens/GameScreen";
 import { WinScreen } from "./screens/WinScreen";
 import { Toast } from "./components/Toast";
+import { SoloFlow } from "./solo/SoloFlow";
 
 function App() {
   const game = useGame();
   const [prefilledRoom, setPrefilledRoom] = useState<string | null>(null);
+  const [view, setView] = useState<"app" | "solo">("app");
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const room = params.get("room");
     if (room) setPrefilledRoom(room.toUpperCase());
   }, []);
+
+  if (view === "solo") {
+    return <SoloFlow onExit={() => setView("app")} />;
+  }
 
   return (
     <>
@@ -32,6 +38,7 @@ function App() {
           busy={game.busy}
           onCreate={game.createRoom}
           onJoin={game.joinRoom}
+          onSolo={() => setView("solo")}
           initialRoomCode={prefilledRoom}
         />
       )}

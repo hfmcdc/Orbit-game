@@ -23,6 +23,7 @@ import {
   toPublicState,
   type Room,
 } from "./rooms";
+import { cleanupSoloForSocket, leaveSolo, newSoloGame, startSolo, submitSoloGuess } from "./solo";
 
 loadVocab();
 
@@ -214,14 +215,56 @@ io.on("connection", (socket: Socket) => {
     }
   });
 
+  socket.on("start_solo", (payload, cb) => {
+    try {
+      const result = startSolo(payload?.mode, socket.id);
+      if (!result.ok) return cb({ ok: false, error: result.error });
+      cb({ ok: true, state: result.state });
+    } catch (e) {
+      cb({ ok: false, error: "Failed to start solo game." });
+    }
+  });
+
+  socket.on("solo_guess", (payload, cb) => {
+    try {
+      const result = submitSoloGuess(payload?.soloId, socket.id, payload?.word || "");
+      if (!result.ok) return cb({ ok: false, error: result.error });
+      cb({ ok: true, state: result.state });
+    } catch (e) {
+      cb({ ok: false, error: "Failed to submit guess." });
+    }
+  });
+
+  socket.on("solo_new_game", (payload, cb) => {
+    try {
+      const result = newSoloGame(payload?.soloId, socket.id);
+      if (!result.ok) return cb({ ok: false, error: result.error });
+      cb({ ok: true, state: result.state });
+    } catch (e) {
+      cb({ ok: false, error: "Failed to start a new solo game." });
+    }
+  });
+
+  socket.on("leave_solo", (payload, cb) => {
+    try {
+      const result = leaveSolo(payload?.soloId, socket.id);
+      if (!result.ok) return cb({ ok: false, error: result.error });
+      cb({ ok: true });
+    } catch (e) {
+      cb({ ok: false, error: "Failed to leave solo game." });
+    }
+  });
+
   socket.on("disconnect", () => {
     const info = socketToPlayer.get(socket.id);
-    if (!info) return;
-    const room = getRoom(info.roomCode);
-    if (room) {
-      markDisconnected(room, info.playerId);
+    if (info) {
+      const room = getRoom(info.roomCode);
+      if (room) {
+        markDisconnected(room, info.playerId);
+      }
+      socketToPlayer.delete(socket.id);
     }
-    socketToPlayer.delete(socket.id);
+    cleanupSoloForSocket(socket.id);
   });
 });
 

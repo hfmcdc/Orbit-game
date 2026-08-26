@@ -8,10 +8,11 @@ interface HomeScreenProps {
   busy: boolean;
   onCreate: (nickname: string) => void;
   onJoin: (roomCode: string, nickname: string) => void;
+  onSolo: () => void;
   initialRoomCode?: string | null;
 }
 
-export function HomeScreen({ busy, onCreate, onJoin, initialRoomCode }: HomeScreenProps) {
+export function HomeScreen({ busy, onCreate, onJoin, onSolo, initialRoomCode }: HomeScreenProps) {
   const [mode, setMode] = useState<"start" | "create" | "join">(
     initialRoomCode ? "join" : "start"
   );
@@ -41,13 +42,38 @@ export function HomeScreen({ busy, onCreate, onJoin, initialRoomCode }: HomeScre
             <Button fullWidth variant="secondary" onClick={() => setMode("join")}>
               Join a room
             </Button>
+            <Button fullWidth variant="secondary" onClick={onSolo}>
+              Solo
+            </Button>
             <button
               type="button"
               onClick={() => setHowToPlayOpen(true)}
-              className="text-text-dim hover:text-text-primary text-sm mt-2 py-2 underline underline-offset-4"
+              className="text-text-dim hover:text-text-primary text-sm mt-1 py-1 underline underline-offset-4"
             >
               How to play
             </button>
+
+            <div className="mt-3 bg-panel-2/60 border border-border-subtle rounded-2xl px-4 py-3 text-center">
+              <p className="text-accent-danger/90 text-xs font-semibold uppercase tracking-wide">
+                This game is currently a demo
+              </p>
+              <p className="text-text-dim text-xs mt-1.5 leading-relaxed">
+                There may be bugs, glitches, or unexpected crashes while playing. Please
+                cooperate with us while we continue testing and improving Orbit.
+              </p>
+            </div>
+
+            <div className="flex flex-col items-center gap-1.5">
+              <p className="text-text-dim text-xs">Have feedback or found a bug?</p>
+              <a
+                href="https://ap.surveymars.com/q/yCX2beWhD"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm font-medium text-accent-far underline underline-offset-4"
+              >
+                Send Feedback
+              </a>
+            </div>
           </div>
         )}
 

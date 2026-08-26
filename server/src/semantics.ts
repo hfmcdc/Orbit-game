@@ -99,6 +99,33 @@ export function pickSecretWord(): string {
 }
 
 /**
+ * Deterministically pick a secret word for a given calendar-date key
+ * (e.g. "2026-08-25"), so every player who plays the Daily Challenge on the
+ * same date gets the same word. Uses a simple string hash rather than
+ * Math.random, so the same date key always maps to the same index into the
+ * existing secret-word candidate list — no separate word list, no extra
+ * data files.
+ */
+function hashDateKey(dateKey: string): number {
+  let hash = 0;
+  for (let i = 0; i < dateKey.length; i++) {
+    hash = (hash * 31 + dateKey.charCodeAt(i)) >>> 0;
+  }
+  return hash;
+}
+
+export function pickDailySecretWord(dateKey: string): string {
+  if (!store) throw new Error("vocab not loaded");
+  const idx = hashDateKey(dateKey) % store.secretCandidates.length;
+  return store.secretCandidates[idx];
+}
+
+/** Today's UTC calendar date as "YYYY-MM-DD" — the shared key for the Daily Challenge, consistent for every player regardless of local timezone. */
+export function getTodayDateKey(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+/**
  * Build a full rank list for a secret word: an ordered array of vocab words
  * from most similar (rank 1, the secret word itself) to least similar.
  * Returns both a Map from word -> rank (1-indexed) for O(1) guess lookups,

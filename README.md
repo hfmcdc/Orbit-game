@@ -1,24 +1,38 @@
 # Orbit — a multiplayer word-guessing game
 
-One secret word per lobby. 2–4 players take turns guessing; every guess gets ranked
-by how close it is in meaning to the secret word (#1 = the word itself). First
-player to hit #1 wins. Inspired by the gameplay idea behind Contexto, built from
-scratch with an original name, UI, and codebase.
+One secret word per round. In multiplayer, 2–4 players take turns guessing; every
+guess gets ranked by how close it is in meaning to the secret word (#1 = the word
+itself). First player to hit #1 wins. There's also a Solo mode (Daily Challenge and
+unlimited Practice) for playing alone. Inspired by the gameplay idea behind Contexto,
+built from scratch with an original name, UI, and codebase.
 
 ## Project structure
 
 ```
 orbit/
 ├── client/     React + TypeScript + Tailwind (Vite) — the UI
+│   └── src/solo/SoloFlow.tsx   Solo mode screen controller
 ├── server/     Node + TypeScript + Express + Socket.IO — the game server
-│               (also serves the built client in production)
+│   │           (also serves the built client in production)
+│   ├── src/rooms.ts    multiplayer room/turn/vote logic
+│   ├── src/solo.ts     Solo mode logic (practice + daily challenge)
+│   ├── src/hints.ts    shared hint-selection math, used by both rooms.ts and solo.ts
+│   └── src/semantics.ts   the semantic ranking engine (shared by everything)
 ├── shared/     TypeScript types shared between client and server (reference copy;
 │               client/ and server/ each keep their own copy so they build/deploy
 │               independently — see "Keeping shared types in sync" below)
 └── render.yaml Render deployment blueprint
 ```
 
-## How the game works
+## Landing screen
+
+The first screen is a landing screen with three primary actions — **Create a Room**,
+**Join a Room**, and **Solo** — plus a "How to play" link, a demo notice ("This game
+is currently a demo…"), and a **Send Feedback** link that opens
+`https://ap.surveymars.com/q/yCX2beWhD` in a new tab. No email address is shown or
+linked anywhere.
+
+## How multiplayer works
 
 - **Lobby**: create a room (get a 6-character code) or join one with a code.
   2–4 players. Only the host can start.
@@ -52,6 +66,34 @@ orbit/
   Orbit opens full-screen with no browser chrome, like a real app. The
   prompt hides itself automatically once the app is already installed, and
   stays dismissed for 7 days if closed.
+
+## How Solo mode works
+
+Solo mode reuses the exact same semantic engine, hint math, and word-validation
+logic as multiplayer (see `server/src/hints.ts` and `server/src/semantics.ts`) — there
+is no separate/duplicated ranking system.
+
+- **Practice**: pick a random secret word and guess with no timer, no turns, and
+  unlimited guesses, until you find it. Each new Practice round tries to avoid
+  immediately repeating your previous word. "Play again" starts a fresh round.
+- **Daily Challenge**: one secret word per calendar day (UTC), chosen
+  **server-side** and **deterministically** from a hash of the date — so every
+  player who plays on the same date gets the same word, without the server
+  needing to store anything ahead of time. Can be played once per calendar day;
+  completion (guesses, best rank) is cached in `localStorage` so it survives a
+  page refresh and the challenge shows as already-completed for the rest of the
+  day. A simple day-to-day streak is tracked locally: it increases when you
+  complete on consecutive calendar days, and resets if a day is skipped.
+- **Hints in Solo**: since there are no turns, hints trigger off completed
+  guesses instead — one opening hint immediately, then another every 5 guesses,
+  using the identical "always closer than your best guess so far" guarantee as
+  multiplayer.
+- **Solo Stats**: a local, no-account stats screen (games played, words found,
+  best/average guesses, best rank ever seen, current/longest streak) computed
+  entirely from what's actually stored in `localStorage` — nothing is
+  fabricated or estimated.
+- The secret word is never sent to the client until a round is won, exactly like
+  multiplayer.
 
 ## Local development
 
@@ -205,12 +247,29 @@ during development, covering:
   majority-no vote resumes play and puts the room's give-up button on a
   5-minute cooldown, and a repeat vote attempt during that cooldown is
   rejected
+- Solo mode: opening hint present and secret word hidden at start, empty and
+  duplicate guesses rejected, a guess from a different session than the one
+  that owns a Solo game is rejected, the win path was verified end-to-end
+  (deterministically forcing a known secret word) confirming the round
+  finishes, the word is revealed, and further guesses are refused, Daily
+  Challenge was confirmed to return identical rankings across two
+  independent sessions on the same day, and Practice's "play again" was
+  confirmed to reject on Daily games and succeed on Practice games
+- Landing screen: the feedback link was verified to point at the exact
+  SurveyMars URL with `target="_blank"` and `rel="noopener noreferrer"`, and
+  no email address appears anywhere in the markup
+- Mobile layout: verified with Playwright at 360×800, 390×844, and 412×915 —
+  no horizontal overflow on the landing screen or any Solo screen at any of
+  those sizes
 
 To re-verify locally, start the server (`npm run dev` in `server/`) and open
 several browser tabs/devices to `http://localhost:5173` (or your deployed
 URL), each with a different nickname, and play through a full round. Suggested
 manual checks:
 
+- **Landing**: confirm Create/Join/Solo all work, the demo notice appears
+  below the main buttons, and Send Feedback opens the SurveyMars survey in a
+  new tab.
 - **Lobby**: create on one device, join from 1–3 others using the room code;
   confirm a 5th join attempt is rejected.
 - **Turns**: confirm play proceeds P1 → P2 → P3 → P4 → P1 in the order
@@ -228,6 +287,11 @@ manual checks:
   the closest guesser declared winner and the word revealed.
 - **Winning**: keep guessing until someone reaches #1; confirm the win screen
   shows correctly on all devices, including for non-winners.
+- **Solo Practice**: start a round, guess a few words, confirm hints appear
+  every 5 guesses, win, and confirm "Play again" starts a fresh round.
+- **Daily Challenge**: complete it once, confirm the completed state
+  (guesses/best rank/streak) persists across a page refresh and across
+  navigating away and back, and confirm it cannot be replayed the same day.
 - **Mobile**: check at roughly 360×800, 390×844, and 412×915 — the layout is
   built mobile-first with a sticky guess input and should not require
   horizontal scrolling at any of these sizes.
