@@ -95,7 +95,29 @@ is no separate/duplicated ranking system.
 - The secret word is never sent to the client until a round is won, exactly like
   multiplayer.
 
-## Local development
+## Link previews (WhatsApp, Telegram, Discord, Facebook, X)
+
+`client/index.html` includes Open Graph and Twitter Card metadata (title,
+description, and a 1200×630 preview image at `client/public/orbit-preview.png`,
+served directly as a static file — no auth, no JS, no WebSocket required, so
+link-preview crawlers can fetch it directly). The image is the Orbit banner,
+letterboxed onto Orbit's own background color to fit the standard social
+preview aspect ratio without cropping any of the artwork or text.
+
+All `og:*`/`twitter:*` URLs are absolute (`https://orbit-game-2.onrender.com/...`).
+If you redeploy to a different URL, update the `og:url`, `og:image`,
+`twitter:image`, and `<link rel="canonical">` values in `client/index.html`
+to match.
+
+**Note on caching**: WhatsApp, Telegram, Facebook, and similar platforms cache
+link previews per-URL for a while. If you shared the link before this change
+shipped, the old (blank) preview may keep showing for a bit even though the
+metadata is now correct — that's the platform's cache, not a bug. Sharing the
+link to a chat that's never seen it before (or using each platform's own
+"link debugger"/preview-refresh tool, e.g. Facebook's Sharing Debugger) will
+show the current preview immediately.
+
+
 
 Requires Node.js 20+.
 
