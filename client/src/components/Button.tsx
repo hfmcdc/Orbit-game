@@ -1,4 +1,5 @@
 import type { ButtonHTMLAttributes } from "react";
+import { handleAudioTap } from "../lib/audio/AudioManager";
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: "primary" | "secondary" | "ghost" | "danger";
@@ -22,11 +23,16 @@ export function Button({
   fullWidth,
   className = "",
   children,
+  onClick,
   ...rest
 }: ButtonProps) {
   return (
     <button
       className={`${base} ${variants[variant]} ${fullWidth ? "w-full" : ""} px-6 py-4 text-base ${className}`}
+      onClick={(e) => {
+        handleAudioTap();
+        onClick?.(e);
+      }}
       {...rest}
     >
       {children}

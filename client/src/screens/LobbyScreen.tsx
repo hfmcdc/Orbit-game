@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { Button } from "../components/Button";
 import { HowToPlayModal } from "../components/HowToPlayModal";
+import { AudioButton } from "../components/AudioButton";
+import { useMenuAmbience } from "../lib/audio/useGameAudio";
 import type { RoomStateForClient } from "../shared/types";
 
 interface LobbyScreenProps {
@@ -11,6 +13,7 @@ interface LobbyScreenProps {
 }
 
 export function LobbyScreen({ state, myPlayerId, onStart, onLeave }: LobbyScreenProps) {
+  useMenuAmbience();
   const [copied, setCopied] = useState(false);
   const [howToPlayOpen, setHowToPlayOpen] = useState(false);
   const isHost = myPlayerId === state.hostId;
@@ -47,7 +50,10 @@ export function LobbyScreen({ state, myPlayerId, onStart, onLeave }: LobbyScreen
   };
 
   return (
-    <div className="min-h-dvh flex flex-col px-6 py-8">
+    <div className="min-h-dvh flex flex-col px-6 py-8 relative">
+      <div className="absolute top-4 right-4">
+        <AudioButton />
+      </div>
       <div className="w-full max-w-sm mx-auto flex-1 flex flex-col">
         <div className="text-center mb-8">
           <p className="text-text-dim text-sm font-medium tracking-wide uppercase">Orbit</p>

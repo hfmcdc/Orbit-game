@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { Button } from "../components/Button";
 import { ProximityRing } from "../components/ProximityRing";
+import { AudioButton } from "../components/AudioButton";
+import { audioManager } from "../lib/audio/AudioManager";
+import { useHintFeedback, useRankFeedback, useReactiveAmbience } from "../lib/audio/useGameAudio";
 import type { SoloStateForClient } from "../shared/types";
 
 interface SoloGameScreenProps {
@@ -14,6 +17,10 @@ export function SoloGameScreen({ state, onGuess, onBack }: SoloGameScreenProps) 
   const [submitting, setSubmitting] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  useReactiveAmbience(state.bestRank);
+  useRankFeedback(state.bestRank);
+  useHintFeedback(state.guesses[0]?.id, state.guesses[0]?.isHint);
+
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
@@ -22,9 +29,10 @@ export function SoloGameScreen({ state, onGuess, onBack }: SoloGameScreenProps) 
     const word = value.trim();
     if (!word || submitting) return;
     setSubmitting(true);
-    onGuess(word, () => {
+    onGuess(word, (ok) => {
       setSubmitting(false);
       setValue("");
+      if (!ok) audioManager.playSfx("invalid");
       inputRef.current?.focus();
     });
   };
@@ -39,9 +47,12 @@ export function SoloGameScreen({ state, onGuess, onBack }: SoloGameScreenProps) 
             </p>
             <p className="text-text-primary text-sm font-medium">Find the secret word.</p>
           </div>
-          <button onClick={onBack} className="text-text-dim text-sm hover:text-accent-danger">
-            Leave
-          </button>
+          <div className="flex items-center gap-3">
+            <AudioButton />
+            <button onClick={onBack} className="text-text-dim text-sm hover:text-accent-danger">
+              Leave
+            </button>
+          </div>
         </div>
 
         <div className="flex flex-col items-center py-2">

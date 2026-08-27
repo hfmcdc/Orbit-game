@@ -2,7 +2,15 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "../components/Button";
 import { ProximityRing } from "../components/ProximityRing";
 import { GiveUpVoteModal } from "../components/GiveUpVoteModal";
+import { AudioButton } from "../components/AudioButton";
 import { useCountdown } from "../lib/useCountdown";
+import { audioManager } from "../lib/audio/AudioManager";
+import {
+  useHintFeedback,
+  useRankFeedback,
+  useReactiveAmbience,
+  useTimerFeedback,
+} from "../lib/audio/useGameAudio";
 import type { GuessResult, RoomStateForClient, VoteChoice } from "../shared/types";
 
 interface GameScreenProps {
@@ -34,6 +42,11 @@ export function GameScreen({
   const currentPlayer = state.players.find((p) => p.id === state.currentPlayerId);
   const me = state.players.find((p) => p.id === myPlayerId);
 
+  useReactiveAmbience(me?.bestRank ?? null);
+  useRankFeedback(me?.bestRank ?? null);
+  useHintFeedback(state.guesses[0]?.id, state.guesses[0]?.isHint);
+  useTimerFeedback(remaining, isMyTurn);
+
   useEffect(() => {
     if (isMyTurn) {
       setLocked(false);
@@ -54,6 +67,7 @@ export function GameScreen({
         // arrives. It unlocks automatically next time it's this player's turn.
         setLocked(true);
       } else {
+        audioManager.playSfx("invalid");
         inputRef.current?.focus();
       }
     });
@@ -72,6 +86,7 @@ export function GameScreen({
             <p className="font-mono text-sm text-text-dim">{state.roomCode}</p>
           </div>
           <div className="flex items-center gap-3">
+            <AudioButton />
             <button
               onClick={onRequestGiveUp}
               disabled={state.vote.active}

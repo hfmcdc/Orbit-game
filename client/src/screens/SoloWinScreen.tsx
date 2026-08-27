@@ -1,4 +1,6 @@
 import { Button } from "../components/Button";
+import { AudioButton } from "../components/AudioButton";
+import { useVictorySequence } from "../lib/audio/useGameAudio";
 import type { SoloStateForClient } from "../shared/types";
 
 interface SoloWinScreenProps {
@@ -9,8 +11,12 @@ interface SoloWinScreenProps {
 }
 
 export function SoloWinScreen({ state, currentStreak, onPlayAgain, onBackToHome }: SoloWinScreenProps) {
+  useVictorySequence(true);
   return (
-    <div className="min-h-dvh flex flex-col items-center justify-center px-6 py-10">
+    <div className="min-h-dvh flex flex-col items-center justify-center px-6 py-10 relative">
+      <div className="absolute top-4 right-4">
+        <AudioButton />
+      </div>
       <div className="w-full max-w-sm flex flex-col items-center text-center">
         <div className="text-5xl mb-3">🏆</div>
         <h1 className="font-display font-800 text-3xl tracking-tight">Word found!</h1>

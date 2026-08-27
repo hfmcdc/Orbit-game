@@ -3,6 +3,8 @@ import { Button } from "../components/Button";
 import { TextField } from "../components/TextField";
 import { HowToPlayModal } from "../components/HowToPlayModal";
 import { InstallPrompt } from "../components/InstallPrompt";
+import { AudioButton } from "../components/AudioButton";
+import { useMenuAmbience } from "../lib/audio/useGameAudio";
 
 interface HomeScreenProps {
   busy: boolean;
@@ -13,6 +15,7 @@ interface HomeScreenProps {
 }
 
 export function HomeScreen({ busy, onCreate, onJoin, onSolo, initialRoomCode }: HomeScreenProps) {
+  useMenuAmbience();
   const [mode, setMode] = useState<"start" | "create" | "join">(
     initialRoomCode ? "join" : "start"
   );
@@ -21,7 +24,10 @@ export function HomeScreen({ busy, onCreate, onJoin, onSolo, initialRoomCode }: 
   const [howToPlayOpen, setHowToPlayOpen] = useState(false);
 
   return (
-    <div className="min-h-dvh flex flex-col items-center justify-center px-6 py-10">
+    <div className="min-h-dvh flex flex-col items-center justify-center px-6 py-10 relative">
+      <div className="absolute top-4 right-4">
+        <AudioButton />
+      </div>
       <div className="w-full max-w-sm">
         <div className="flex flex-col items-center mb-10 text-center">
           <OrbitMark />

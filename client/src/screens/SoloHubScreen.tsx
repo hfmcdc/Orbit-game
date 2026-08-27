@@ -1,4 +1,7 @@
 import { Button } from "../components/Button";
+import { AudioButton } from "../components/AudioButton";
+import { handleAudioTap } from "../lib/audio/AudioManager";
+import { useMenuAmbience } from "../lib/audio/useGameAudio";
 import type { DailyCompletion } from "../lib/dailyChallenge";
 
 interface SoloHubScreenProps {
@@ -20,8 +23,12 @@ export function SoloHubScreen({
   onStats,
   onBack,
 }: SoloHubScreenProps) {
+  useMenuAmbience();
   return (
-    <div className="min-h-dvh flex flex-col items-center justify-center px-6 py-10">
+    <div className="min-h-dvh flex flex-col items-center justify-center px-6 py-10 relative">
+      <div className="absolute top-4 right-4">
+        <AudioButton />
+      </div>
       <div className="w-full max-w-sm">
         <div className="flex flex-col items-center mb-8 text-center">
           <p className="text-text-dim text-sm font-medium tracking-wide uppercase">Orbit</p>
@@ -52,7 +59,10 @@ export function SoloHubScreen({
           </div>
         ) : (
           <button
-            onClick={onDaily}
+            onClick={() => {
+              handleAudioTap();
+              onDaily();
+            }}
             disabled={busy}
             className="w-full text-left bg-panel-2 border border-border-subtle hover:border-accent-core/60 rounded-2xl px-5 py-4 mb-4 transition-colors disabled:opacity-50"
           >
@@ -65,7 +75,10 @@ export function SoloHubScreen({
         )}
 
         <button
-          onClick={onPractice}
+          onClick={() => {
+            handleAudioTap();
+            onPractice();
+          }}
           disabled={busy}
           className="w-full text-left bg-panel-2 border border-border-subtle hover:border-accent-far/60 rounded-2xl px-5 py-4 mb-4 transition-colors disabled:opacity-50"
         >

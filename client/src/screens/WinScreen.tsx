@@ -1,4 +1,8 @@
+import { useEffect } from "react";
 import { Button } from "../components/Button";
+import { AudioButton } from "../components/AudioButton";
+import { audioManager } from "../lib/audio/AudioManager";
+import { useVictorySequence } from "../lib/audio/useGameAudio";
 import type { RoomStateForClient } from "../shared/types";
 
 interface WinScreenProps {
@@ -15,6 +19,13 @@ export function WinScreen({ state, myPlayerId, onPlayAgain, onLeave }: WinScreen
   const me = state.players.find((p) => p.id === myPlayerId);
   const noWinner = state.winnerId === null;
 
+  // A genuine #1 finish gets the celebratory sting; a give-up ending just
+  // settles back into calm ambience without the "victory" fanfare.
+  useVictorySequence(!state.endedByGiveUp);
+  useEffect(() => {
+    if (state.endedByGiveUp) audioManager.playMusic("calm");
+  }, [state.endedByGiveUp]);
+
   const sorted = [...state.players].sort((a, b) => {
     if (a.bestRank === null) return 1;
     if (b.bestRank === null) return -1;
@@ -28,7 +39,10 @@ export function WinScreen({ state, myPlayerId, onPlayAgain, onLeave }: WinScreen
       : `${winner?.nickname ?? "Someone"} wins!`;
 
   return (
-    <div className="min-h-dvh flex flex-col items-center justify-center px-6 py-10">
+    <div className="min-h-dvh flex flex-col items-center justify-center px-6 py-10 relative">
+      <div className="absolute top-4 right-4">
+        <AudioButton />
+      </div>
       <div className="w-full max-w-sm flex flex-col items-center text-center">
         <div className="text-5xl mb-3">{state.endedByGiveUp ? "🏳️" : "🏆"}</div>
         <h1 className="font-display font-800 text-3xl tracking-tight">{heading}</h1>
